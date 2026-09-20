@@ -375,13 +375,6 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text(
-                                'from',
-                                style: TextStyle(
-                                  color: Color(0xFF9FA4AB),
-                                  fontSize: 12,
-                                ),
-                              ),
                               const SizedBox(width: 4),
                               SvgPicture.asset(
                                 'assets/images/metaLogo.svg',
