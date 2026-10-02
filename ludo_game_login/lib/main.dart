@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+<<<<<<< HEAD
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
@@ -15,6 +16,11 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
+=======
+import 'ludo_signin_screen.dart';
+
+void main() {
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
   runApp(const MyApp());
 }
 
@@ -30,6 +36,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF583BE3)),
         useMaterial3: true,
       ),
+<<<<<<< HEAD
       home: const AuthGate(),
     );
   }
@@ -56,6 +63,9 @@ class AuthGate extends StatelessWidget {
         }
         return const LudoSigninScreen();
       },
+=======
+      home: const LudoSigninScreen(),
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
     );
   }
 }

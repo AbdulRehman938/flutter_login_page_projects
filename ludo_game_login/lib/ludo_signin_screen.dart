@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+<<<<<<< HEAD
 import 'auth_service.dart';
 import 'ludo_login_screen.dart';
 import 'validation_utils.dart';
+=======
+import 'ludo_login_screen.dart';
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
 
 class LudoSigninScreen extends StatefulWidget {
   const LudoSigninScreen({super.key});
@@ -14,6 +18,7 @@ class LudoSigninScreen extends StatefulWidget {
 class _LudoSigninScreenState extends State<LudoSigninScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+<<<<<<< HEAD
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -23,6 +28,18 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
   final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
   final GlobalKey<TooltipState> _passwordTooltipKey =
       GlobalKey<TooltipState>();
+=======
+  bool _isButtonEnabled = false;
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController.addListener(_validateInput);
+    _passwordController.addListener(_validateInput);
+  }
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
 
   @override
   void dispose() {
@@ -31,6 +48,7 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
     super.dispose();
   }
 
+<<<<<<< HEAD
   Future<void> _handleSignIn() async {
     final emailErr = ValidationUtils.validateEmail(_emailController.text);
     final passErr =
@@ -84,6 +102,33 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
         }
       });
     }
+=======
+  void _validateInput() {
+    String email = _emailController.text.trim();
+    String password = _passwordController.text;
+
+    setState(() {
+      _isButtonEnabled = email.isNotEmpty && password.isNotEmpty;
+    });
+  }
+
+  void _handleSignIn() {
+    if (!_isButtonEnabled) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        // TODO: Navigate to next screen
+        print('Sign in button pressed');
+      }
+    });
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
   }
 
   void _handleSignUp() {
@@ -105,11 +150,19 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
   }
 
   void _handleRecoverPassword() {
+<<<<<<< HEAD
     showUnderDevelopmentDialog(context, 'Recover Password');
   }
 
   void _handleBack() {
     if (Navigator.canPop(context)) Navigator.pop(context);
+=======
+    print('Recover password pressed');
+  }
+
+  void _handleBack() {
+    print('Back pressed');
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
   }
 
   @override
@@ -282,6 +335,7 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                             controller: _emailController,
                             hintText: 'Your Email Here',
                             icon: 'assets/emailIcon.svg',
+<<<<<<< HEAD
                             errorText: _emailError,
                             tooltipKey: _emailTooltipKey,
                             onChanged: (_) {
@@ -289,6 +343,8 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                                 setState(() => _emailError = null);
                               }
                             },
+=======
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
                           ),
                           SizedBox(height: screenHeight * 0.02),
 
@@ -327,9 +383,19 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                             width: double.infinity,
                             height: 50,
                             child: ElevatedButton(
+<<<<<<< HEAD
                               onPressed: _isLoading ? null : _handleSignIn,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF583BE3),
+=======
+                              onPressed: _isButtonEnabled && !_isLoading
+                                  ? _handleSignIn
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isButtonEnabled
+                                    ? const Color(0xFF583BE3)
+                                    : const Color(0xFF3C1F42),
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
@@ -342,8 +408,12 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
+<<<<<<< HEAD
                                         valueColor:
                                             AlwaysStoppedAnimation<Color>(
+=======
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
                                           Colors.white,
                                         ),
                                       ),
@@ -363,7 +433,11 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                           Row(
                             children: [
                               const Text(
+<<<<<<< HEAD
                                 "Don't have an account? ",
+=======
+                                'Don\'t have an account? ',
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
@@ -422,14 +496,18 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
     required TextEditingController controller,
     required String hintText,
     required String icon,
+<<<<<<< HEAD
     String? errorText,
     GlobalKey<TooltipState>? tooltipKey,
     void Function(String)? onChanged,
+=======
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
   }) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF3C1F42),
         borderRadius: BorderRadius.circular(8),
+<<<<<<< HEAD
         border: errorText != null
             ? Border.all(color: const Color(0xFFED4956), width: 1)
             : null,
@@ -437,6 +515,11 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
+=======
+      ),
+      child: TextField(
+        controller: controller,
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
         style: const TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -459,6 +542,7 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
               ),
             ),
           ),
+<<<<<<< HEAD
           suffixIconConstraints:
               const BoxConstraints(minWidth: 0, minHeight: 0),
           suffixIcon: errorText != null && tooltipKey != null
@@ -467,6 +551,8 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                   message: errorText,
                 )
               : null,
+=======
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
           filled: true,
           fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(
@@ -498,18 +584,24 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF3C1F42),
         borderRadius: BorderRadius.circular(8),
+<<<<<<< HEAD
         border: _passwordError != null
             ? Border.all(color: const Color(0xFFED4956), width: 1)
             : null,
+=======
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
       ),
       child: TextField(
         controller: _passwordController,
         obscureText: _obscurePassword,
+<<<<<<< HEAD
         onChanged: (_) {
           if (_passwordError != null) {
             setState(() => _passwordError = null);
           }
         },
+=======
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
         style: const TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -532,6 +624,7 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
               ),
             ),
           ),
+<<<<<<< HEAD
           suffixIconConstraints:
               const BoxConstraints(minWidth: 0, minHeight: 0),
           suffixIcon: _passwordError != null
@@ -562,6 +655,26 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                     },
                   ),
                 ),
+=======
+          suffixIcon: IconButton(
+            icon: SvgPicture.asset(
+              _obscurePassword
+                  ? 'assets/closedEye.svg'
+                  : 'assets/openEyeIcon.svg',
+              width: 20,
+              height: 20,
+              colorFilter: const ColorFilter.mode(
+                Colors.white,
+                BlendMode.srcIn,
+              ),
+            ),
+            onPressed: () {
+              setState(() {
+                _obscurePassword = !_obscurePassword;
+              });
+            },
+          ),
+>>>>>>> 11ff43f526d279c60815de22f34273dcada4f19d
           filled: true,
           fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(
