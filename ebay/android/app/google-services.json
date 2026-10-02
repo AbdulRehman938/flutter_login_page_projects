@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "518021439110",
+    "project_id": "ebay-login-demo",
+    "storage_bucket": "ebay-login-demo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:518021439110:android:b318fc18f530e007053b07",
+        "android_client_info": {
+          "package_name": "com.example.ebay"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCM8-qEdg4T1fIrwU4B0CGhMQbPmMgV_7Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'auth_service.dart';
 import 'instagram_signup_screen.dart';
+import 'validation_utils.dart';
 
 class InstagramLoginScreen extends StatefulWidget {
   const InstagramLoginScreen({super.key});
@@ -12,17 +14,12 @@ class InstagramLoginScreen extends StatefulWidget {
 class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isButtonEnabled = false;
   bool _isLoading = false;
   String? _emailError;
   String? _passwordError;
 
-  @override
-  void initState() {
-    super.initState();
-    _emailController.addListener(_validateInput);
-    _passwordController.addListener(_validateInput);
-  }
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _passwordTooltipKey = GlobalKey<TooltipState>();
 
   @override
   void dispose() {
@@ -31,33 +28,58 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
     super.dispose();
   }
 
-  void _validateInput() {
-    String email = _emailController.text.trim();
-    String password = _passwordController.text;
+  Future<void> _handleLogin() async {
+    final emailErr = ValidationUtils.validateLoginInput(_emailController.text);
+    final passErr = ValidationUtils.validatePassword(_passwordController.text);
 
     setState(() {
-      _isButtonEnabled = email.isNotEmpty && password.isNotEmpty;
-      _emailError = null;
-      _passwordError = null;
-    });
-  }
-
-  void _handleLogin() {
-    if (!_isButtonEnabled) return;
-
-    setState(() {
-      _isLoading = true;
+      _emailError = emailErr;
+      _passwordError = passErr;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // TODO: Navigate to next screen
-        print('Login successful');
+    if (emailErr != null) {
+      Future.microtask(() => _emailTooltipKey.currentState?.ensureTooltipVisible());
+    } else if (passErr != null) {
+      Future.microtask(() => _passwordTooltipKey.currentState?.ensureTooltipVisible());
+    }
+
+    if (emailErr != null || passErr != null) return;
+
+    setState(() => _isLoading = true);
+
+    if (AuthService.instance.isFirebaseInitialized) {
+      final rawInput = _emailController.text.trim();
+      final email = rawInput.contains('@') ? rawInput : '$rawInput@instagram.com';
+      try {
+        await AuthService.instance.signInWithEmailPassword(
+          email: email,
+          password: _passwordController.text,
+        );
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Logged in successfully!');
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          final errorMessage = AuthService.getReadableErrorMessage(e);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: const Color(0xFFED4956),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
-    });
+    } else {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Logged in successfully!');
+        }
+      });
+    }
   }
 
   @override
@@ -84,7 +106,7 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                       Column(
                         children: [
                           SizedBox(height: screenHeight * 0.02),
-                          
+
                           // Language selector
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -126,7 +148,8 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: ElevatedButton(
-                              onPressed: () {},
+                              onPressed: () => showUnderDevelopmentDialog(
+                                  context, 'Continue with Facebook'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 foregroundColor: Colors.white,
@@ -171,7 +194,8 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
                                 child: Text(
                                   'OR',
                                   style: TextStyle(
@@ -191,29 +215,48 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                           ),
                           SizedBox(height: screenHeight * 0.03),
 
-                          // Phone/username/email input
+                          // Phone/username/email input — no errorText to avoid layout shift
                           TextField(
                             controller: _emailController,
                             style: const TextStyle(
                               color: Color(0xFFF2F4D4),
                               fontSize: 14,
                             ),
+                            onChanged: (_) {
+                              if (_emailError != null) {
+                                setState(() => _emailError = null);
+                              }
+                            },
                             decoration: InputDecoration(
                               hintText: 'Phone number, username, or email',
                               hintStyle: const TextStyle(
                                 color: Color(0xFF9FA4AB),
                                 fontSize: 14,
                               ),
-                              errorText: _emailError,
                               filled: true,
                               fillColor: const Color(0xFF1A1A1A),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 14,
                               ),
+                              suffixIconConstraints:
+                                  const BoxConstraints(minWidth: 0, minHeight: 0),
+                              suffixIcon: _emailError != null
+                                  ? ErrorTooltip(
+                                      tooltipKey: _emailTooltipKey,
+                                      message: _emailError!,
+                                    )
+                                  : null,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
                                 borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: _emailError != null
+                                    ? const BorderSide(
+                                        color: Color(0xFFED4956), width: 1)
+                                    : BorderSide.none,
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
@@ -234,22 +277,41 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                               color: Color(0xFFF2F4D4),
                               fontSize: 14,
                             ),
+                            onChanged: (_) {
+                              if (_passwordError != null) {
+                                setState(() => _passwordError = null);
+                              }
+                            },
                             decoration: InputDecoration(
                               hintText: 'Password',
                               hintStyle: const TextStyle(
                                 color: Color(0xFF9FA4AB),
                                 fontSize: 14,
                               ),
-                              errorText: _passwordError,
                               filled: true,
                               fillColor: const Color(0xFF1A1A1A),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 14,
                               ),
+                              suffixIconConstraints:
+                                  const BoxConstraints(minWidth: 0, minHeight: 0),
+                              suffixIcon: _passwordError != null
+                                  ? ErrorTooltip(
+                                      tooltipKey: _passwordTooltipKey,
+                                      message: _passwordError!,
+                                    )
+                                  : null,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
                                 borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: _passwordError != null
+                                    ? const BorderSide(
+                                        color: Color(0xFFED4956), width: 1)
+                                    : BorderSide.none,
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
@@ -266,7 +328,8 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () {},
+                              onPressed: () => showUnderDevelopmentDialog(
+                                  context, 'Forgot password?'),
                               child: const Text(
                                 'Forgot password?',
                                 style: TextStyle(
@@ -284,15 +347,11 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                             width: double.infinity,
                             height: 44,
                             decoration: BoxDecoration(
-                              color: _isButtonEnabled
-                                  ? const Color(0xFF4599FF)
-                                  : const Color(0xFF133B6E),
+                              color: const Color(0xFF4599FF),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: ElevatedButton(
-                              onPressed: _isButtonEnabled && !_isLoading
-                                  ? _handleLogin
-                                  : null,
+                              onPressed: _isLoading ? null : _handleLogin,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 foregroundColor: Colors.white,
@@ -307,7 +366,8 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
                                           Colors.white,
                                         ),
                                       ),
@@ -339,7 +399,8 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => const InstagramSignupScreen(),
+                                      builder: (context) =>
+                                          const InstagramSignupScreen(),
                                     ),
                                   );
                                 },
@@ -357,17 +418,20 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                         ],
                       ),
 
-                      // Bottom section with terms and meta branding
+                      // Bottom section
                       Column(
                         children: [
-                          // Terms and privacy policy
-                          const Text(
-                            "By continuing, you agree to Instagram's Terms of Use and Privacy Policy.",
-                            style: TextStyle(
-                              color: Color(0xFF9FA4AB),
-                              fontSize: 12,
+                          GestureDetector(
+                            onTap: () => showUnderDevelopmentDialog(
+                                context, 'Terms of Use and Privacy Policy'),
+                            child: const Text(
+                              "By continuing, you agree to Instagram's Terms of Use and Privacy Policy.",
+                              style: TextStyle(
+                                color: Color(0xFF9FA4AB),
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            textAlign: TextAlign.center,
                           ),
                           SizedBox(height: screenHeight * 0.02),
 
@@ -391,7 +455,8 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
 
                           // Bottom navigation bar
                           Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 12),
                             decoration: const BoxDecoration(
                               color: Color(0xFF1F1F22),
                               border: Border(
@@ -402,13 +467,19 @@ class _InstagramLoginScreenState extends State<InstagramLoginScreen> {
                               ),
                             ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceAround,
                               children: [
-                                _buildNavItem('assets/images/homeLogo.svg', true),
-                                _buildNavItem('assets/images/searchLogo.svg', false),
-                                _buildNavItem('assets/images/reelsLogo.svg', false),
-                                _buildNavItem('assets/images/messageLogo.svg', false),
-                                _buildNavItem('assets/images/profileLogo.svg', false),
+                                _buildNavItem(
+                                    'assets/images/homeLogo.svg', true),
+                                _buildNavItem(
+                                    'assets/images/searchLogo.svg', false),
+                                _buildNavItem(
+                                    'assets/images/reelsLogo.svg', false),
+                                _buildNavItem(
+                                    'assets/images/messageLogo.svg', false),
+                                _buildNavItem(
+                                    'assets/images/profileLogo.svg', false),
                               ],
                             ),
                           ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'ludo_signin_screen.dart';
+import 'auth_service.dart';
+import 'validation_utils.dart';
 
 class LudoLoginScreen extends StatefulWidget {
   const LudoLoginScreen({super.key});
@@ -13,18 +14,18 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isButtonEnabled = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _agreeToPromotions = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _emailController.addListener(_validateInput);
-    _nameController.addListener(_validateInput);
-    _passwordController.addListener(_validateInput);
-  }
+  String? _emailError;
+  String? _nameError;
+  String? _passwordError;
+
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _nameTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _passwordTooltipKey =
+      GlobalKey<TooltipState>();
 
   @override
   void dispose() {
@@ -34,36 +35,65 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
     super.dispose();
   }
 
-  void _validateInput() {
-    String email = _emailController.text.trim();
-    String name = _nameController.text.trim();
-    String password = _passwordController.text;
+  Future<void> _handleContinue() async {
+    final emailErr = ValidationUtils.validateEmail(_emailController.text);
+    final nameErr = ValidationUtils.validateName(_nameController.text);
+    final passErr = ValidationUtils.validatePassword(_passwordController.text);
 
     setState(() {
-      _isButtonEnabled = email.isNotEmpty &&
-          name.isNotEmpty &&
-          password.isNotEmpty &&
-          password.length >= 8 &&
-          password.contains(RegExp(r'[0-9]'));
-    });
-  }
-
-  void _handleContinue() {
-    if (!_isButtonEnabled) return;
-
-    setState(() {
-      _isLoading = true;
+      _emailError = emailErr;
+      _nameError = nameErr;
+      _passwordError = passErr;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // TODO: Navigate to next screen
-        print('Continue button pressed');
+    if (emailErr != null) {
+      Future.microtask(
+          () => _emailTooltipKey.currentState?.ensureTooltipVisible());
+    } else if (nameErr != null) {
+      Future.microtask(
+          () => _nameTooltipKey.currentState?.ensureTooltipVisible());
+    } else if (passErr != null) {
+      Future.microtask(
+          () => _passwordTooltipKey.currentState?.ensureTooltipVisible());
+    }
+
+    if (emailErr != null || nameErr != null || passErr != null) return;
+
+    setState(() => _isLoading = true);
+
+    if (AuthService.instance.isFirebaseInitialized) {
+      try {
+        await AuthService.instance.registerWithEmailPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          displayName: _nameController.text.trim(),
+        );
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Account created successfully!');
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          final errorMessage = AuthService.getReadableErrorMessage(e);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: const Color(0xFFC40000),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
-    });
+    } else {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Account created successfully!');
+        }
+      });
+    }
   }
 
   void _handleSignIn() {
@@ -248,6 +278,13 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
                             controller: _emailController,
                             hintText: 'Your Email Here',
                             icon: 'assets/emailIcon.svg',
+                            errorText: _emailError,
+                            tooltipKey: _emailTooltipKey,
+                            onChanged: (_) {
+                              if (_emailError != null) {
+                                setState(() => _emailError = null);
+                              }
+                            },
                           ),
                           SizedBox(height: screenHeight * 0.02),
 
@@ -256,6 +293,13 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
                             controller: _nameController,
                             hintText: 'Your Name',
                             icon: 'assets/userNameIcon.svg',
+                            errorText: _nameError,
+                            tooltipKey: _nameTooltipKey,
+                            onChanged: (_) {
+                              if (_nameError != null) {
+                                setState(() => _nameError = null);
+                              }
+                            },
                           ),
                           SizedBox(height: screenHeight * 0.02),
 
@@ -283,12 +327,13 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
                                     _agreeToPromotions = value ?? false;
                                   });
                                 },
-                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
                                 visualDensity: VisualDensity.compact,
                                 activeColor: const Color(0xFF583BE3),
                               ),
-                              Expanded(
-                                child: const Text(
+                              const Expanded(
+                                child: Text(
                                   'I want to be the first to hear of discounts, promotions and more on Codashop',
                                   style: TextStyle(
                                     color: Colors.white,
@@ -331,13 +376,9 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
                             width: double.infinity,
                             height: 50,
                             child: ElevatedButton(
-                              onPressed: _isButtonEnabled && !_isLoading
-                                  ? _handleContinue
-                                  : null,
+                              onPressed: _isLoading ? null : _handleContinue,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _isButtonEnabled
-                                    ? const Color(0xFF583BE3)
-                                    : const Color(0xFF3C1F42),
+                                backgroundColor: const Color(0xFF583BE3),
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
@@ -350,7 +391,8 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
                                           Colors.white,
                                         ),
                                       ),
@@ -382,14 +424,21 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
     required TextEditingController controller,
     required String hintText,
     required String icon,
+    String? errorText,
+    GlobalKey<TooltipState>? tooltipKey,
+    void Function(String)? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF3C1F42),
         borderRadius: BorderRadius.circular(8),
+        border: errorText != null
+            ? Border.all(color: const Color(0xFFED4956), width: 1)
+            : null,
       ),
       child: TextField(
         controller: controller,
+        onChanged: onChanged,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -412,6 +461,14 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
               ),
             ),
           ),
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
+          suffixIcon: errorText != null && tooltipKey != null
+              ? ErrorTooltip(
+                  tooltipKey: tooltipKey,
+                  message: errorText,
+                )
+              : null,
           filled: true,
           fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(
@@ -443,10 +500,18 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF3C1F42),
         borderRadius: BorderRadius.circular(8),
+        border: _passwordError != null
+            ? Border.all(color: const Color(0xFFED4956), width: 1)
+            : null,
       ),
       child: TextField(
         controller: _passwordController,
         obscureText: _obscurePassword,
+        onChanged: (_) {
+          if (_passwordError != null) {
+            setState(() => _passwordError = null);
+          }
+        },
         style: const TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -469,24 +534,36 @@ class _LudoLoginScreenState extends State<LudoLoginScreen> {
               ),
             ),
           ),
-          suffixIcon: IconButton(
-            icon: SvgPicture.asset(
-              _obscurePassword
-                  ? 'assets/closedEye.svg'
-                  : 'assets/openEyeIcon.svg',
-              width: 20,
-              height: 20,
-              colorFilter: const ColorFilter.mode(
-                Colors.white,
-                BlendMode.srcIn,
-              ),
-            ),
-            onPressed: () {
-              setState(() {
-                _obscurePassword = !_obscurePassword;
-              });
-            },
-          ),
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
+          suffixIcon: _passwordError != null
+              ? ErrorTooltip(
+                  tooltipKey: _passwordTooltipKey,
+                  message: _passwordError!,
+                )
+              : SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: SvgPicture.asset(
+                      _obscurePassword
+                          ? 'assets/closedEye.svg'
+                          : 'assets/openEyeIcon.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                ),
           filled: true,
           fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'date_of_birth_screen.dart';
-import 'find_account_screen.dart';
+import 'validation_utils.dart';
 
 class NameInputScreen extends StatefulWidget {
   const NameInputScreen({super.key});
@@ -203,14 +203,7 @@ class _NameInputScreenState extends State<NameInputScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 20.0),
               child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const FindAccountScreen(),
-                    ),
-                  );
-                },
+                onTap: () => showUnderDevelopmentDialog(context, 'Find my account'),
                 child: const Text(
                   'Find my account',
                   style: TextStyle(
@@ -242,13 +235,23 @@ class _NameInputScreenState extends State<NameInputScreen> {
           color: Color(0xFF65676B),
           fontSize: 16,
         ),
-        errorText: errorText,
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
         ),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 40,
+          minHeight: 48,
+          maxWidth: 48,
+          maxHeight: 48,
+        ),
+        suffixIcon: errorText != null
+            ? FacebookErrorTooltip(
+                message: errorText,
+              )
+            : null,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(
@@ -259,15 +262,15 @@ class _NameInputScreenState extends State<NameInputScreen> {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: errorText != null ? Colors.red : const Color(0xFFDADDE1),
+            color: errorText != null ? const Color(0xFFC40000) : const Color(0xFFDADDE1),
             width: 1,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(
-            color: Color(0xFF005FD5),
-            width: 1,
+          borderSide: BorderSide(
+            color: errorText != null ? const Color(0xFFC40000) : const Color(0xFF005FD5),
+            width: 2,
           ),
         ),
       ),

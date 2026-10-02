@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'auth_service.dart';
 import 'instagram_login_screen.dart';
+import 'validation_utils.dart';
 
 class InstagramSignupScreen extends StatefulWidget {
   const InstagramSignupScreen({super.key});
@@ -13,20 +15,17 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isButtonEnabled = false;
   bool _isLoading = false;
   bool _agreeToTerms = false;
   String? _nameError;
   String? _usernameError;
   String? _passwordError;
 
-  @override
-  void initState() {
-    super.initState();
-    _nameController.addListener(_validateInput);
-    _usernameController.addListener(_validateInput);
-    _passwordController.addListener(_validateInput);
-  }
+  final GlobalKey<TooltipState> _nameTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _usernameTooltipKey =
+      GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _passwordTooltipKey =
+      GlobalKey<TooltipState>();
 
   @override
   void dispose() {
@@ -36,39 +35,90 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
     super.dispose();
   }
 
-  void _validateInput() {
-    String name = _nameController.text.trim();
-    String username = _usernameController.text.trim();
-    String password = _passwordController.text.trim();
+  Future<void> _handleSignup() async {
+    final nameErr = ValidationUtils.validateName(_nameController.text);
+    final usernameErr =
+        ValidationUtils.validateUsername(_usernameController.text);
+    final passErr =
+        ValidationUtils.validateSignupPassword(_passwordController.text);
 
     setState(() {
-      _isButtonEnabled = name.isNotEmpty && username.isNotEmpty && password.isNotEmpty && _agreeToTerms;
-      _nameError = null;
-      _usernameError = null;
-      _passwordError = null;
-    });
-  }
-
-  void _handleSignup() {
-    if (!_isButtonEnabled) return;
-
-    setState(() {
-      _isLoading = true;
+      _nameError = nameErr;
+      _usernameError = usernameErr;
+      _passwordError = passErr;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const InstagramLoginScreen(),
-          ),
+    if (nameErr != null) {
+      Future.microtask(
+          () => _nameTooltipKey.currentState?.ensureTooltipVisible());
+    } else if (usernameErr != null) {
+      Future.microtask(
+          () => _usernameTooltipKey.currentState?.ensureTooltipVisible());
+    } else if (passErr != null) {
+      Future.microtask(
+          () => _passwordTooltipKey.currentState?.ensureTooltipVisible());
+    }
+
+    if (nameErr != null || usernameErr != null || passErr != null) return;
+
+    if (!_agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please agree to the Terms of Use and Privacy Policy'),
+          backgroundColor: Color(0xFFED4956),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    if (AuthService.instance.isFirebaseInitialized) {
+      final rawUsername = _usernameController.text.trim();
+      final email = rawUsername.contains('@') ? rawUsername : '$rawUsername@instagram.com';
+      try {
+        await AuthService.instance.registerWithEmailPassword(
+          email: email,
+          password: _passwordController.text,
+          displayName: _nameController.text.trim(),
         );
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Account created successfully!');
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          final errorMessage = AuthService.getReadableErrorMessage(e);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: const Color(0xFFED4956),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
-    });
+    } else {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Account created successfully!');
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const InstagramLoginScreen(),
+                ),
+              );
+            }
+          });
+        }
+      });
+    }
   }
 
   @override
@@ -87,7 +137,8 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                   minHeight: screenHeight,
                 ),
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04),
+                  padding:
+                      EdgeInsets.symmetric(horizontal: screenWidth * 0.04),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -130,7 +181,8 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: ElevatedButton(
-                              onPressed: () {},
+                              onPressed: () => showUnderDevelopmentDialog(
+                                  context, 'Continue with Facebook'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 foregroundColor: Colors.white,
@@ -176,7 +228,8 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12),
                                 child: Text(
                                   'OR',
                                   style: TextStyle(
@@ -204,22 +257,41 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                               color: Color(0xFFF2F4D4),
                               fontSize: 14,
                             ),
+                            onChanged: (_) {
+                              if (_nameError != null) {
+                                setState(() => _nameError = null);
+                              }
+                            },
                             decoration: InputDecoration(
                               hintText: 'Full Name',
                               hintStyle: const TextStyle(
                                 color: Color(0xFF9FA4AB),
                                 fontSize: 14,
                               ),
-                              errorText: _nameError,
                               filled: true,
                               fillColor: const Color(0xFF1A1A1A),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 14,
                               ),
+                              suffixIconConstraints: const BoxConstraints(
+                                  minWidth: 0, minHeight: 0),
+                              suffixIcon: _nameError != null
+                                  ? ErrorTooltip(
+                                      tooltipKey: _nameTooltipKey,
+                                      message: _nameError!,
+                                    )
+                                  : null,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
                                 borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: _nameError != null
+                                    ? const BorderSide(
+                                        color: Color(0xFFED4956), width: 1)
+                                    : BorderSide.none,
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
@@ -240,22 +312,41 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                               color: Color(0xFFF2F4D4),
                               fontSize: 14,
                             ),
+                            onChanged: (_) {
+                              if (_usernameError != null) {
+                                setState(() => _usernameError = null);
+                              }
+                            },
                             decoration: InputDecoration(
                               hintText: 'Username',
                               hintStyle: const TextStyle(
                                 color: Color(0xFF9FA4AB),
                                 fontSize: 14,
                               ),
-                              errorText: _usernameError,
                               filled: true,
                               fillColor: const Color(0xFF1A1A1A),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 14,
                               ),
+                              suffixIconConstraints: const BoxConstraints(
+                                  minWidth: 0, minHeight: 0),
+                              suffixIcon: _usernameError != null
+                                  ? ErrorTooltip(
+                                      tooltipKey: _usernameTooltipKey,
+                                      message: _usernameError!,
+                                    )
+                                  : null,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
                                 borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: _usernameError != null
+                                    ? const BorderSide(
+                                        color: Color(0xFFED4956), width: 1)
+                                    : BorderSide.none,
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
@@ -277,22 +368,41 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                               color: Color(0xFFF2F4D4),
                               fontSize: 14,
                             ),
+                            onChanged: (_) {
+                              if (_passwordError != null) {
+                                setState(() => _passwordError = null);
+                              }
+                            },
                             decoration: InputDecoration(
                               hintText: 'Password',
                               hintStyle: const TextStyle(
                                 color: Color(0xFF9FA4AB),
                                 fontSize: 14,
                               ),
-                              errorText: _passwordError,
                               filled: true,
                               fillColor: const Color(0xFF1A1A1A),
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 14,
                               ),
+                              suffixIconConstraints: const BoxConstraints(
+                                  minWidth: 0, minHeight: 0),
+                              suffixIcon: _passwordError != null
+                                  ? ErrorTooltip(
+                                      tooltipKey: _passwordTooltipKey,
+                                      message: _passwordError!,
+                                    )
+                                  : null,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
                                 borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: _passwordError != null
+                                    ? const BorderSide(
+                                        color: Color(0xFFED4956), width: 1)
+                                    : BorderSide.none,
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
@@ -315,10 +425,9 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                                 onChanged: (value) {
                                   setState(() {
                                     _agreeToTerms = value ?? false;
-                                    _validateInput();
                                   });
                                 },
-                                fillColor: MaterialStateProperty.resolveWith(
+                                fillColor: WidgetStateProperty.resolveWith(
                                   (states) => _agreeToTerms
                                       ? const Color(0xFF4599FF)
                                       : const Color(0xFF262626),
@@ -327,12 +436,9 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                               ),
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _agreeToTerms = !_agreeToTerms;
-                                      _validateInput();
-                                    });
-                                  },
+                                  onTap: () => showUnderDevelopmentDialog(
+                                      context,
+                                      "Terms of Use and Privacy Policy"),
                                   child: const Text(
                                     "I agree to Instagram's Terms of Use and Privacy Policy",
                                     style: TextStyle(
@@ -352,15 +458,11 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                             width: double.infinity,
                             height: 44,
                             decoration: BoxDecoration(
-                              color: _isButtonEnabled
-                                  ? const Color(0xFF4599FF)
-                                  : const Color(0xFF133B6E),
+                              color: const Color(0xFF4599FF),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: ElevatedButton(
-                              onPressed: _isButtonEnabled && !_isLoading
-                                  ? _handleSignup
-                                  : null,
+                              onPressed: _isLoading ? null : _handleSignup,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 foregroundColor: Colors.white,
@@ -375,7 +477,8 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
                                           Colors.white,
                                         ),
                                       ),
@@ -408,7 +511,8 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => const InstagramLoginScreen(),
+                                      builder: (context) =>
+                                          const InstagramLoginScreen(),
                                     ),
                                   );
                                 },
@@ -442,10 +546,14 @@ class _InstagramSignupScreenState extends State<InstagramSignupScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             _buildNavItem('assets/images/homeLogo.svg', false),
-                            _buildNavItem('assets/images/searchLogo.svg', false),
-                            _buildNavItem('assets/images/reelsLogo.svg', false),
-                            _buildNavItem('assets/images/messageLogo.svg', false),
-                            _buildNavItem('assets/images/profileLogo.svg', false),
+                            _buildNavItem(
+                                'assets/images/searchLogo.svg', false),
+                            _buildNavItem(
+                                'assets/images/reelsLogo.svg', false),
+                            _buildNavItem(
+                                'assets/images/messageLogo.svg', false),
+                            _buildNavItem(
+                                'assets/images/profileLogo.svg', false),
                           ],
                         ),
                       ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'landing_screen.dart';
-import 'twitter_onboarding_screen.dart';
+import 'auth_service.dart';
+import 'validation_utils.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,90 +11,92 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  bool _isButtonEnabled = false;
+  TextEditingController? _emailController;
+  TextEditingController? _passwordController;
   bool _isLoading = false;
-  String? _errorMessage;
+  bool _showPassword = false;
+  String? _emailError;
+  String? _passwordError;
+
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _passwordTooltipKey = GlobalKey<TooltipState>();
 
   @override
   void initState() {
     super.initState();
-    _emailController.addListener(_validateInput);
+    _emailController = TextEditingController();
+    _passwordController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _emailController?.dispose();
+    _passwordController?.dispose();
     super.dispose();
   }
 
-  bool _isValidEmail(String email) {
-    // More permissive email validation
-    return RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email);
-  }
-
-  bool _isValidUsername(String username) {
-    // Username validation: at least 1 character, letters, numbers, underscores
-    return RegExp(r'^[a-zA-Z0-9_]{1,}$').hasMatch(username);
-  }
-
-  void _validateInput() {
-    String input = _emailController.text.trim();
-    
-    if (input.isEmpty) {
-      setState(() {
-        _isButtonEnabled = false;
-        _errorMessage = null;
-      });
+  void _handleSubmit() async {
+    // Check if controllers are initialized
+    if (_emailController == null || _passwordController == null) {
+      if (mounted) {
+        setState(() {
+          _emailError = 'Please wait, loading...';
+        });
+      }
       return;
     }
 
-    // Check if it's an email or username
-    if (input.contains('@')) {
-      if (!_isValidEmail(input)) {
-        setState(() {
-          _isButtonEnabled = false;
-          _errorMessage = 'Please enter a valid email address';
-        });
-        return;
-      }
-    } else {
-      if (!_isValidUsername(input)) {
-        setState(() {
-          _isButtonEnabled = false;
-          _errorMessage = 'Username can only contain letters, numbers, and underscores';
-        });
-        return;
-      }
+    // Store values before any async operations
+    final emailText = _emailController!.text;
+    final passwordText = _passwordController!.text;
+
+    if (!mounted) return;
+
+    // Validate email
+    final emailErr = ValidationUtils.validateLoginInput(emailText);
+    if (!mounted) return;
+    setState(() => _emailError = emailErr);
+
+    if (emailErr != null) {
+      Future.microtask(
+          () => _emailTooltipKey.currentState?.ensureTooltipVisible());
+      return;
     }
 
-    setState(() {
-      _isButtonEnabled = true;
-      _errorMessage = null;
-    });
-  }
+    // Validate password
+    if (passwordText.isEmpty) {
+      if (!mounted) return;
+      setState(() => _passwordError = 'Password is required');
+      Future.microtask(
+          () => _passwordTooltipKey.currentState?.ensureTooltipVisible());
+      return;
+    }
 
-  void _handleSubmit() {
-    if (!_isButtonEnabled) return;
+    if (!mounted) return;
+    setState(() => _isLoading = true);
 
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Simulate API call
-    Future.delayed(const Duration(seconds: 2), () {
+    try {
+      // Add timeout to prevent indefinite waiting
+      await AuthService.instance.signInWithEmailPassword(
+        email: emailText,
+        password: passwordText,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Connection timeout. Please check your internet connection.');
+        },
+      );
+      // Navigation is handled by AuthGate in main.dart
+    } catch (e) {
       if (mounted) {
         setState(() {
+          _passwordError = AuthService.getReadableErrorMessage(e);
           _isLoading = false;
         });
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const TwitterOnboardingScreen(),
-          ),
-        );
+        Future.microtask(
+            () => _passwordTooltipKey.currentState?.ensureTooltipVisible());
       }
-    });
+    }
   }
 
   @override
@@ -174,6 +176,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     icon: 'assets/images/phoneImage.svg',
                     text: 'Continue with phone',
                     screenWidth: screenWidth,
+                    onPressed: () => showUnderDevelopmentDialog(
+                        context, 'Continue with phone'),
                   ),
 
                   const SizedBox(height: 12),
@@ -183,6 +187,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     icon: 'assets/images/googleIcon.svg',
                     text: 'Continue with Google',
                     screenWidth: screenWidth,
+                    onPressed: () => showUnderDevelopmentDialog(
+                        context, 'Continue with Google'),
                   ),
 
                   const SizedBox(height: 12),
@@ -192,6 +198,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     icon: 'assets/images/appleLogo.svg',
                     text: 'Continue with Apple',
                     screenWidth: screenWidth,
+                    onPressed: () => showUnderDevelopmentDialog(
+                        context, 'Continue with Apple'),
                   ),
 
                   const SizedBox(height: 24),
@@ -228,63 +236,158 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Email or username input
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF202327),
-                          borderRadius: BorderRadius.circular(4),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.05),
-                              blurRadius: 4,
-                              spreadRadius: 0,
-                            ),
-                          ],
+                  // Email or username input — tooltip approach, no errorText
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF202327),
+                      borderRadius: BorderRadius.circular(4),
+                      border: _emailError != null
+                          ? Border.all(color: Colors.red, width: 1)
+                          : null,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          spreadRadius: 0,
                         ),
-                        child: TextField(
-                          controller: _emailController,
-                          style: const TextStyle(
-                            color: Color(0xFFF8FAFC),
-                            fontSize: 16,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Email or username',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF71767B),
-                              fontSize: 16,
-                            ),
-                            errorText: _errorMessage,
-                            filled: true,
-                            fillColor: Colors.transparent,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4),
-                              borderSide: BorderSide(
-                                color: _errorMessage != null ? Colors.red : Colors.transparent,
-                                width: _errorMessage != null ? 1 : 0,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF1D9BF0),
-                                width: 2,
-                              ),
-                            ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _emailController,
+                      style: const TextStyle(
+                        color: Color(0xFFF8FAFC),
+                        fontSize: 16,
+                      ),
+                      onChanged: (_) {
+                        if (_emailError != null) {
+                          setState(() => _emailError = null);
+                        }
+                      },
+                      enabled: _emailController != null,
+                      decoration: InputDecoration(
+                        hintText: 'Email or username',
+                        hintStyle: const TextStyle(
+                          color: Color(0xFF71767B),
+                          fontSize: 16,
+                        ),
+                        filled: true,
+                        fillColor: Colors.transparent,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        suffixIconConstraints:
+                            const BoxConstraints(minWidth: 0, minHeight: 0),
+                        suffixIcon: _emailError != null
+                            ? ErrorTooltip(
+                                tooltipKey: _emailTooltipKey,
+                                message: _emailError!,
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF1D9BF0),
+                            width: 2,
                           ),
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Password input
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF202327),
+                      borderRadius: BorderRadius.circular(4),
+                      border: _passwordError != null
+                          ? Border.all(color: Colors.red, width: 1)
+                          : null,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _passwordController,
+                      obscureText: !_showPassword,
+                      style: const TextStyle(
+                        color: Color(0xFFF8FAFC),
+                        fontSize: 16,
+                      ),
+                      onChanged: (_) {
+                        if (_passwordError != null) {
+                          setState(() => _passwordError = null);
+                        }
+                      },
+                      enabled: _passwordController != null,
+                      decoration: InputDecoration(
+                        hintText: 'Password',
+                        hintStyle: const TextStyle(
+                          color: Color(0xFF71767B),
+                          fontSize: 16,
+                        ),
+                        filled: true,
+                        fillColor: Colors.transparent,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        suffixIconConstraints:
+                            const BoxConstraints(minWidth: 0, minHeight: 0),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_passwordError != null)
+                              ErrorTooltip(
+                                tooltipKey: _passwordTooltipKey,
+                                message: _passwordError!,
+                              ),
+                            IconButton(
+                              icon: Icon(
+                                _showPassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                color: const Color(0xFF71767B),
+                              ),
+                              onPressed: _passwordController != null
+                                  ? () {
+                                      setState(() => _showPassword = !_showPassword);
+                                    }
+                                  : null,
+                            ),
+                          ],
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF1D9BF0),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
 
                   const SizedBox(height: 24),
@@ -294,20 +397,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: double.infinity,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: _isButtonEnabled
-                          ? const Color(0xFFF8FAFC)
-                          : const Color(0xFF4A4A4A),
+                      color: _isLoading
+                          ? const Color(0xFF71767B)
+                          : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.white.withValues(alpha: 0.25),
-                          blurRadius: _isButtonEnabled ? 12 : 8,
-                          spreadRadius: _isButtonEnabled ? 2 : 1,
+                          blurRadius: 12,
+                          spreadRadius: 2,
                         ),
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: _isButtonEnabled && !_isLoading ? _handleSubmit : null,
+                      onPressed: _isLoading ? null : _handleSubmit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: Colors.black,
@@ -317,15 +420,29 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.black,
+                          ? const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Signing in...',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
                             )
                           : const Text(
                               'Continue',
@@ -348,41 +465,62 @@ class _LoginScreenState extends State<LoginScreen> {
                 horizontal: screenWidth * 0.04,
                 vertical: screenHeight * 0.02,
               ),
-              child: RichText(
-                textAlign: TextAlign.center,
-                text: const TextSpan(
-                  style: TextStyle(
-                    color: Color(0xFF71767B),
-                    fontSize: 12,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                children: [
+                  const Text(
+                    'By continuing, you agree to our ',
+                    style: TextStyle(color: Color(0xFF71767B), fontSize: 12),
                   ),
-                  children: [
-                    TextSpan(text: 'By continuing, you agree to our '),
-                    TextSpan(
-                      text: 'Terms of Service',
+                  GestureDetector(
+                    onTap: () =>
+                        showUnderDevelopmentDialog(context, 'Terms of Service'),
+                    child: const Text(
+                      'Terms of Service',
                       style: TextStyle(
                         color: Color(0xFFF8FAFC),
                         fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
                     ),
-                    TextSpan(text: ', '),
-                    TextSpan(
-                      text: 'Privacy Policy',
+                  ),
+                  const Text(
+                    ', ',
+                    style: TextStyle(color: Color(0xFF71767B), fontSize: 12),
+                  ),
+                  GestureDetector(
+                    onTap: () =>
+                        showUnderDevelopmentDialog(context, 'Privacy Policy'),
+                    child: const Text(
+                      'Privacy Policy',
                       style: TextStyle(
                         color: Color(0xFFF8FAFC),
                         fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
                     ),
-                    TextSpan(text: ' and '),
-                    TextSpan(
-                      text: 'Cookie Use',
+                  ),
+                  const Text(
+                    ' and ',
+                    style: TextStyle(color: Color(0xFF71767B), fontSize: 12),
+                  ),
+                  GestureDetector(
+                    onTap: () =>
+                        showUnderDevelopmentDialog(context, 'Cookie Use'),
+                    child: const Text(
+                      'Cookie Use',
                       style: TextStyle(
                         color: Color(0xFFF8FAFC),
                         fontWeight: FontWeight.bold,
+                        fontSize: 12,
                       ),
                     ),
-                    TextSpan(text: '.'),
-                  ],
-                ),
+                  ),
+                  const Text(
+                    '.',
+                    style: TextStyle(color: Color(0xFF71767B), fontSize: 12),
+                  ),
+                ],
               ),
             ),
           ],
@@ -395,6 +533,7 @@ class _LoginScreenState extends State<LoginScreen> {
     required String icon,
     required String text,
     required double screenWidth,
+    required VoidCallback onPressed,
   }) {
     return Container(
       width: double.infinity,
@@ -411,7 +550,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
       child: ElevatedButton(
-        onPressed: () {},
+        onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.black,

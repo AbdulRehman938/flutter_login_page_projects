@@ -1,20 +1,54 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'gender_selection_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'auth_service.dart';
 import 'facebook_login_screen.dart';
-import 'get_started_screen.dart';
-import 'name_input_screen.dart';
-import 'date_of_birth_screen.dart';
-import 'mobile_number_screen.dart';
-import 'email_address_screen.dart';
-import 'password_screen.dart';
-import 'save_login_info_screen.dart';
-import 'terms_policies_screen.dart';
-import 'find_account_screen.dart';
-import 'search_by_mobile_screen.dart';
 
-class FacebookOnboardingScreen extends StatelessWidget {
+class FacebookOnboardingScreen extends StatefulWidget {
   static const String routeName = '/onboarding';
   const FacebookOnboardingScreen({super.key});
+
+  @override
+  State<FacebookOnboardingScreen> createState() => _FacebookOnboardingScreenState();
+}
+
+class _FacebookOnboardingScreenState extends State<FacebookOnboardingScreen> {
+  User? _currentUser;
+  StreamSubscription<User?>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUser = AuthService.instance.currentUser;
+    _authSubscription = AuthService.instance.authStateChanges.listen((user) {
+      if (mounted) {
+        setState(() {
+          _currentUser = user;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleLogout() async {
+    await AuthService.instance.signOut();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logged out successfully')),
+      );
+      // Redirect to login screen and clear navigation stack
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const FacebookLoginScreen()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,138 +58,133 @@ class FacebookOnboardingScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
-          'Facebook Demo',
+          'Facebook Profile',
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome message
-            const Text(
-              'Facebook Onboarding Demo',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Navigate to any screen in the signup flow',
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFF65676B),
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Navigation buttons
-            const Text(
-              'Navigate to Screens',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 2.5,
-              children: [
-                _buildNavButton(context, 'Login', const FacebookLoginScreen()),
-                _buildNavButton(context, 'Get Started', const GetStartedScreen()),
-                _buildNavButton(context, 'Name Input', const NameInputScreen()),
-                _buildNavButton(context, 'Date of Birth', const DateOfBirthScreen()),
-                _buildNavButton(context, 'Gender', const GenderSelectionScreen()),
-                _buildNavButton(context, 'Mobile', const MobileNumberScreen()),
-                _buildNavButton(context, 'Email', const EmailAddressScreen()),
-                _buildNavButton(context, 'Password', const PasswordScreen()),
-                _buildNavButton(context, 'Save Login', const SaveLoginInfoScreen()),
-                _buildNavButton(context, 'Terms', const TermsPoliciesScreen()),
-                _buildNavButton(context, 'Find Account', const FindAccountScreen()),
-                _buildNavButton(context, 'Search Mobile', const SearchByMobileScreen()),
-              ],
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Instructions
-            Container(
-              padding: const EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F2F5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Instructions:',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // User info card
+              if (_currentUser != null)
+                Container(
+                  padding: const EdgeInsets.all(24.0),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE7F3FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF005FD5), width: 2),
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    '• Tap any button above to navigate to that screen\n• Use the back button on each screen to return\n• This is a frontend demo only',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF65676B),
-                      height: 1.5,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Logged in as:',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF005FD5),
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _handleLogout,
+                            icon: const Icon(Icons.logout, size: 18),
+                            label: const Text('Logout'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF005FD5),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 0,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildUserInfoRow('Email:', _currentUser?.email ?? 'N/A'),
+                      const SizedBox(height: 12),
+                      _buildUserInfoRow('User ID:', _currentUser?.uid ?? 'N/A'),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(24.0),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F2F5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Column(
+                    children: [
+                      Icon(Icons.info_outline, size: 48, color: Color(0xFF65676B)),
+                      SizedBox(height: 16),
+                      Text(
+                        'Not logged in',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF65676B),
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Sign in to see your account information.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF65676B),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNavButton(BuildContext context, String label, Widget screen) {
-    return ElevatedButton(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => screen,
+  Widget _buildUserInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 70,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF65676B),
+            ),
           ),
-        );
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF005FD5),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
         ),
-        elevation: 0,
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'auth_service.dart';
 import 'get_started_screen.dart';
-import 'find_account_screen.dart';
+import 'validation_utils.dart';
 
 class FacebookLoginScreen extends StatefulWidget {
   const FacebookLoginScreen({super.key});
@@ -12,6 +13,11 @@ class FacebookLoginScreen extends StatefulWidget {
 class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _passwordTooltipKey = GlobalKey<TooltipState>();
+
   String? _emailError;
   String? _passwordError;
   bool _isLoading = false;
@@ -20,53 +26,30 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
-  bool _isValidEmail(String email) {
-    // Basic email validation
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
-  }
+  Future<void> _validateAndLogin() async {
+    final emailError = ValidationUtils.validateLoginInput(_emailController.text);
+    final passwordError = ValidationUtils.validatePassword(_passwordController.text);
 
-  bool _isValidPhone(String phone) {
-    // Basic phone validation (at least 10 digits)
-    String digits = phone.replaceAll(RegExp(r'\D'), '');
-    return digits.length >= 10;
-  }
-
-  void _validateAndLogin() {
     setState(() {
-      _emailError = null;
-      _passwordError = null;
+      _emailError = emailError;
+      _passwordError = passwordError;
     });
 
-    String email = _emailController.text.trim();
-    String password = _passwordController.text.trim();
-
-    if (email.isEmpty) {
-      setState(() {
-        _emailError = 'Please enter your mobile number or email';
+    if (emailError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _emailTooltipKey.currentState?.ensureTooltipVisible();
       });
       return;
     }
 
-    if (!_isValidEmail(email) && !_isValidPhone(email)) {
-      setState(() {
-        _emailError = 'Please enter a valid mobile number or email';
-      });
-      return;
-    }
-
-    if (password.isEmpty) {
-      setState(() {
-        _passwordError = 'Please enter your password';
-      });
-      return;
-    }
-
-    if (password.length < 6) {
-      setState(() {
-        _passwordError = 'Password must be at least 6 characters';
+    if (passwordError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _passwordTooltipKey.currentState?.ensureTooltipVisible();
       });
       return;
     }
@@ -75,21 +58,35 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
       _isLoading = true;
     });
 
-    // Simulate login
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // Navigate to onboarding screen for demo
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const GetStartedScreen(),
-          ),
+    if (AuthService.instance.isFirebaseInitialized) {
+      try {
+        await AuthService.instance.signInWithEmailPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
         );
+        if (mounted) {
+          setState(() { _isLoading = false; });
+          showSuccessToast(context, 'Login successful!');
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() { _isLoading = false; });
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AuthService.getReadableErrorMessage(e)),
+            backgroundColor: const Color(0xFFC40000),
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
       }
-    });
+    } else {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() { _isLoading = false; });
+          showSuccessToast(context, 'Login successful!');
+          debugPrint('Login successful');
+        }
+      });
+    }
   }
 
   @override
@@ -103,12 +100,15 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 16.0),
               child: Center(
-                child: Text(
-                  'English (UK)',
-                  style: TextStyle(
-                    color: const Color(0xFF65676B),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                child: InkWell(
+                  onTap: () => showUnderDevelopmentDialog(context, 'Language Selection'),
+                  child: const Text(
+                    'English (UK)',
+                    style: TextStyle(
+                      color: Color(0xFF65676B),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -120,7 +120,7 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Column(
                   children: [
-                    const SizedBox(height: 160),
+                    const SizedBox(height: 120),
                     
                     // Facebook Logo
                     Image.asset(
@@ -129,7 +129,7 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
                       height: 60,
                     ),
                     
-                    const SizedBox(height: 160),
+                    const SizedBox(height: 120),
                     
                     // Input fields
                     Column(
@@ -137,13 +137,18 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
                         _buildTextField(
                           'Mobile number or email address',
                           controller: _emailController,
+                          focusNode: _emailFocusNode,
                           errorText: _emailError,
+                          tooltipKey: _emailTooltipKey,
+                          keyboardType: TextInputType.emailAddress,
                         ),
                         const SizedBox(height: 12),
                         _buildTextField(
                           'Password',
                           controller: _passwordController,
+                          focusNode: _passwordFocusNode,
                           errorText: _passwordError,
+                          tooltipKey: _passwordTooltipKey,
                           obscureText: true,
                         ),
                       ],
@@ -189,8 +194,8 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
                     const SizedBox(height: 16),
                     
                     // Forgotten password link
-                    GestureDetector(
-                      onTap: () {},
+                    InkWell(
+                      onTap: () => showUnderDevelopmentDialog(context, 'Forgotten password?'),
                       child: const Text(
                         'Forgotten password?',
                         style: TextStyle(
@@ -267,13 +272,13 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
                       ),
                     ),
                     
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
             ),
             
-            // Bottom footer - always at bottom
+            // Footer
             Padding(
               padding: const EdgeInsets.only(bottom: 20.0),
               child: Column(
@@ -307,54 +312,78 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
     );
   }
 
-  Widget _buildTextField(String placeholder, {TextEditingController? controller, String? errorText, bool obscureText = false}) {
+  Widget _buildTextField(
+    String placeholder, {
+    TextEditingController? controller,
+    FocusNode? focusNode,
+    String? errorText,
+    GlobalKey<TooltipState>? tooltipKey,
+    bool obscureText = false,
+    TextInputType? keyboardType,
+  }) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       obscureText: obscureText,
+      keyboardType: keyboardType,
+      style: const TextStyle(
+        color: Color(0xFF1C1E21),
+        fontSize: 16,
+      ),
       decoration: InputDecoration(
         hintText: placeholder,
         hintStyle: const TextStyle(
           color: Color(0xFF65676B),
           fontSize: 16,
         ),
-        errorText: errorText,
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: 12,
+          vertical: 14,
         ),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 40,
+          minHeight: 48,
+          maxWidth: 48,
+          maxHeight: 48,
+        ),
+        suffixIcon: errorText != null
+            ? FacebookErrorTooltip(
+                tooltipKey: tooltipKey,
+                message: errorText,
+              )
+            : null,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(
-            color: Color(0xFFDADDE1),
+          borderSide: BorderSide(
+            color: errorText != null ? const Color(0xFFC40000) : const Color(0xFFDADDE1),
             width: 1,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: errorText != null ? Colors.red : const Color(0xFFDADDE1),
+            color: errorText != null ? const Color(0xFFC40000) : const Color(0xFFDADDE1),
             width: 1,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(
-            color: Color(0xFF005FD5),
-            width: 1,
+          borderSide: BorderSide(
+            color: errorText != null ? const Color(0xFFC40000) : const Color(0xFF005FD5),
+            width: 2,
           ),
         ),
       ),
       onChanged: (value) {
-        // Clear error when user types
         if (placeholder.contains('Mobile number') && _emailError != null) {
           setState(() {
-            _emailError = null;
+            _emailError = ValidationUtils.validateLoginInput(value);
           });
         } else if (placeholder.contains('Password') && _passwordError != null) {
           setState(() {
-            _passwordError = null;
+            _passwordError = ValidationUtils.validatePassword(value);
           });
         }
       },
@@ -362,16 +391,9 @@ class _FacebookLoginScreenState extends State<FacebookLoginScreen> {
   }
 
   Widget _buildFooterLink(BuildContext context, String text) {
-    return GestureDetector(
+    return InkWell(
       onTap: () {
-        if (text == 'Help') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const FindAccountScreen(),
-            ),
-          );
-        }
+        showUnderDevelopmentDialog(context, text);
       },
       child: Text(
         text,

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "121984401432",
+    "project_id": "ludo-game-login-demo",
+    "storage_bucket": "ludo-game-login-demo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:121984401432:android:90917a1d4f2b11872bc36d",
+        "android_client_info": {
+          "package_name": "com.example.ludo_game_login"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYnn-DTzTTfIJqZnFGO3SPskKj6tna5us"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

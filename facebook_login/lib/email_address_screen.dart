@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'auth_service.dart';
 import 'gender_selection_screen.dart';
 import 'password_screen.dart';
 import 'find_account_screen.dart';
@@ -48,16 +49,14 @@ class _EmailAddressScreenState extends State<EmailAddressScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() { _isLoading = true; });
 
-    // Simulate API call
-    Future.delayed(const Duration(seconds: 2), () {
+    // Store pending email for multi-step signup
+    AuthService.instance.pendingEmail = _emailController.text.trim();
+
+    Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() { _isLoading = false; });
         Navigator.push(
           context,
           MaterialPageRoute(

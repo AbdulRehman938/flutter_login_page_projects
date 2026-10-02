@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'gender_selection_screen.dart';
+import 'auth_service.dart';
 import 'save_login_info_screen.dart';
 import 'find_account_screen.dart';
 
@@ -55,16 +55,14 @@ class _PasswordScreenState extends State<PasswordScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() { _isLoading = true; });
 
-    // Simulate API call
-    Future.delayed(const Duration(seconds: 2), () {
+    // Store pending password for multi-step signup
+    AuthService.instance.pendingPassword = _passwordController.text;
+
+    Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() { _isLoading = false; });
         Navigator.push(
           context,
           MaterialPageRoute(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'auth_service.dart';
 import 'ludo_login_screen.dart';
+import 'validation_utils.dart';
 
 class LudoSigninScreen extends StatefulWidget {
   const LudoSigninScreen({super.key});
@@ -12,16 +14,15 @@ class LudoSigninScreen extends StatefulWidget {
 class _LudoSigninScreenState extends State<LudoSigninScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isButtonEnabled = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _emailController.addListener(_validateInput);
-    _passwordController.addListener(_validateInput);
-  }
+  String? _emailError;
+  String? _passwordError;
+
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _passwordTooltipKey =
+      GlobalKey<TooltipState>();
 
   @override
   void dispose() {
@@ -30,31 +31,59 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
     super.dispose();
   }
 
-  void _validateInput() {
-    String email = _emailController.text.trim();
-    String password = _passwordController.text;
+  Future<void> _handleSignIn() async {
+    final emailErr = ValidationUtils.validateEmail(_emailController.text);
+    final passErr =
+        ValidationUtils.validateSigninPassword(_passwordController.text);
 
     setState(() {
-      _isButtonEnabled = email.isNotEmpty && password.isNotEmpty;
-    });
-  }
-
-  void _handleSignIn() {
-    if (!_isButtonEnabled) return;
-
-    setState(() {
-      _isLoading = true;
+      _emailError = emailErr;
+      _passwordError = passErr;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // TODO: Navigate to next screen
-        print('Sign in button pressed');
+    if (emailErr != null) {
+      Future.microtask(
+          () => _emailTooltipKey.currentState?.ensureTooltipVisible());
+    } else if (passErr != null) {
+      Future.microtask(
+          () => _passwordTooltipKey.currentState?.ensureTooltipVisible());
+    }
+
+    if (emailErr != null || passErr != null) return;
+
+    setState(() => _isLoading = true);
+
+    if (AuthService.instance.isFirebaseInitialized) {
+      try {
+        await AuthService.instance.signInWithEmailPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Signed in successfully!');
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          final errorMessage = AuthService.getReadableErrorMessage(e);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: const Color(0xFFC40000),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
-    });
+    } else {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          showSuccessToast(context, 'Signed in successfully!');
+        }
+      });
+    }
   }
 
   void _handleSignUp() {
@@ -76,11 +105,11 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
   }
 
   void _handleRecoverPassword() {
-    print('Recover password pressed');
+    showUnderDevelopmentDialog(context, 'Recover Password');
   }
 
   void _handleBack() {
-    print('Back pressed');
+    if (Navigator.canPop(context)) Navigator.pop(context);
   }
 
   @override
@@ -253,6 +282,13 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                             controller: _emailController,
                             hintText: 'Your Email Here',
                             icon: 'assets/emailIcon.svg',
+                            errorText: _emailError,
+                            tooltipKey: _emailTooltipKey,
+                            onChanged: (_) {
+                              if (_emailError != null) {
+                                setState(() => _emailError = null);
+                              }
+                            },
                           ),
                           SizedBox(height: screenHeight * 0.02),
 
@@ -291,13 +327,9 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                             width: double.infinity,
                             height: 50,
                             child: ElevatedButton(
-                              onPressed: _isButtonEnabled && !_isLoading
-                                  ? _handleSignIn
-                                  : null,
+                              onPressed: _isLoading ? null : _handleSignIn,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _isButtonEnabled
-                                    ? const Color(0xFF583BE3)
-                                    : const Color(0xFF3C1F42),
+                                backgroundColor: const Color(0xFF583BE3),
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
@@ -310,7 +342,8 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
                                           Colors.white,
                                         ),
                                       ),
@@ -330,7 +363,7 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
                           Row(
                             children: [
                               const Text(
-                                'Don\'t have an account? ',
+                                "Don't have an account? ",
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
@@ -389,14 +422,21 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
     required TextEditingController controller,
     required String hintText,
     required String icon,
+    String? errorText,
+    GlobalKey<TooltipState>? tooltipKey,
+    void Function(String)? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF3C1F42),
         borderRadius: BorderRadius.circular(8),
+        border: errorText != null
+            ? Border.all(color: const Color(0xFFED4956), width: 1)
+            : null,
       ),
       child: TextField(
         controller: controller,
+        onChanged: onChanged,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -419,6 +459,14 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
               ),
             ),
           ),
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
+          suffixIcon: errorText != null && tooltipKey != null
+              ? ErrorTooltip(
+                  tooltipKey: tooltipKey,
+                  message: errorText,
+                )
+              : null,
           filled: true,
           fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(
@@ -450,10 +498,18 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF3C1F42),
         borderRadius: BorderRadius.circular(8),
+        border: _passwordError != null
+            ? Border.all(color: const Color(0xFFED4956), width: 1)
+            : null,
       ),
       child: TextField(
         controller: _passwordController,
         obscureText: _obscurePassword,
+        onChanged: (_) {
+          if (_passwordError != null) {
+            setState(() => _passwordError = null);
+          }
+        },
         style: const TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -476,24 +532,36 @@ class _LudoSigninScreenState extends State<LudoSigninScreen> {
               ),
             ),
           ),
-          suffixIcon: IconButton(
-            icon: SvgPicture.asset(
-              _obscurePassword
-                  ? 'assets/closedEye.svg'
-                  : 'assets/openEyeIcon.svg',
-              width: 20,
-              height: 20,
-              colorFilter: const ColorFilter.mode(
-                Colors.white,
-                BlendMode.srcIn,
-              ),
-            ),
-            onPressed: () {
-              setState(() {
-                _obscurePassword = !_obscurePassword;
-              });
-            },
-          ),
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
+          suffixIcon: _passwordError != null
+              ? ErrorTooltip(
+                  tooltipKey: _passwordTooltipKey,
+                  message: _passwordError!,
+                )
+              : SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: SvgPicture.asset(
+                      _obscurePassword
+                          ? 'assets/closedEye.svg'
+                          : 'assets/openEyeIcon.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                ),
           filled: true,
           fillColor: Colors.transparent,
           contentPadding: const EdgeInsets.symmetric(

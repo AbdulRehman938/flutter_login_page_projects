@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "803010359017",
+    "project_id": "twitter-login-demo-c13a7",
+    "storage_bucket": "twitter-login-demo-c13a7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:803010359017:android:33c6864773575e8e72ca78",
+        "android_client_info": {
+          "package_name": "com.example.twitter_login"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDrP0ukv3Ajuc5_foG9DDyZ6Z5yKQCcSYo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

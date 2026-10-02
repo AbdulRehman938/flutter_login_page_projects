@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'dart:ui';
 import 'login_screen.dart';
+import 'validation_utils.dart';
 
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
@@ -15,7 +15,7 @@ class _LandingScreenState extends State<LandingScreen> {
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -47,9 +47,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 ),
               ),
             ),
-            
+
             SizedBox(height: screenHeight * 0.15),
-            
+
             // "See what's happening" text
             const Text(
               "See what's happening",
@@ -60,17 +60,16 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
               textAlign: TextAlign.center,
             ),
-            
+
             const Spacer(),
-            
+
             // "Get the app" button
             SizedBox(
               width: screenWidth * 0.8,
               height: 48,
               child: ElevatedButton(
-                onPressed: () {
-                  // TODO: Navigate to app download or continue
-                },
+                onPressed: () =>
+                    showUnderDevelopmentDialog(context, 'Get the app'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFF8FAFC),
                   foregroundColor: Colors.black,
@@ -88,9 +87,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 ),
               ),
             ),
-            
+
             SizedBox(height: screenHeight * 0.02),
-            
+
             // "Already have an account?" text
             const Text(
               "Already have an account?",
@@ -99,9 +98,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 fontSize: 14,
               ),
             ),
-            
+
             SizedBox(height: screenHeight * 0.01),
-            
+
             // "Sign in" button
             SizedBox(
               width: screenWidth * 0.8,
@@ -134,9 +133,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 ),
               ),
             ),
-            
+
             SizedBox(height: screenHeight * 0.04),
-            
+
             // Footer links
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -161,9 +160,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 ],
               ),
             ),
-            
+
             SizedBox(height: screenHeight * 0.008),
-            
+
             // Copyright
             const Text(
               '© 2026 X Corp.',
@@ -172,7 +171,7 @@ class _LandingScreenState extends State<LandingScreen> {
                 fontSize: 12,
               ),
             ),
-            
+
             SizedBox(height: screenHeight * 0.02),
           ],
         ),
@@ -183,17 +182,20 @@ class _LandingScreenState extends State<LandingScreen> {
 
 class _FooterLink extends StatelessWidget {
   final String text;
-  
+
   const _FooterLink(this.text);
-  
+
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: Color(0xFF71767B),
-        fontSize: 12,
-        decoration: TextDecoration.underline,
+    return GestureDetector(
+      onTap: () => showUnderDevelopmentDialog(context, text),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Color(0xFF71767B),
+          fontSize: 12,
+          decoration: TextDecoration.underline,
+        ),
       ),
     );
   }

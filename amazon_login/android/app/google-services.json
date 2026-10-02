@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "499763437222",
+    "project_id": "flutter-auth-a8d16",
+    "storage_bucket": "flutter-auth-a8d16.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499763437222:android:4a41ddfb7d19b433891e67",
+        "android_client_info": {
+          "package_name": "com.example.amazon_login"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "499763437222-i1fgtb0qpr7i4nc6oaks0l3hri4bqdf0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZFxzUrBpqjMO5VUOM1-kr3px3I9_PYAI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "499763437222-i1fgtb0qpr7i4nc6oaks0l3hri4bqdf0.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "499763437222-0404u2pt6eljblctngvlacj17ngm2utq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.amazonLogin"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499763437222:android:ba806e519ae9d1e6891e67",
+        "android_client_info": {
+          "package_name": "com.example.my_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "499763437222-i1fgtb0qpr7i4nc6oaks0l3hri4bqdf0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZFxzUrBpqjMO5VUOM1-kr3px3I9_PYAI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "499763437222-i1fgtb0qpr7i4nc6oaks0l3hri4bqdf0.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "499763437222-0404u2pt6eljblctngvlacj17ngm2utq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.amazonLogin"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

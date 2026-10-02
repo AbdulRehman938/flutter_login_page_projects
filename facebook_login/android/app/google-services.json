@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "960742375625",
+    "project_id": "facebook-login-demo-fb256",
+    "storage_bucket": "facebook-login-demo-fb256.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:960742375625:android:532e0ec14e70d559c04d18",
+        "android_client_info": {
+          "package_name": "com.example.facebook_login"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVtC12e7InOSMYNGxUXe47plIzwHr2vww"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

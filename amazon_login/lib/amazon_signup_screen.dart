@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'auth_service.dart';
+import 'validation_utils.dart';
 
 class AmazonSignupScreen extends StatefulWidget {
   const AmazonSignupScreen({super.key});
@@ -13,7 +15,23 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  bool _isButtonEnabled = false;
+
+  final FocusNode _nameFocusNode = FocusNode();
+  final FocusNode _emailFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
+  final FocusNode _confirmPasswordFocusNode = FocusNode();
+
+  final GlobalKey<TooltipState> _nameTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _passwordTooltipKey = GlobalKey<TooltipState>();
+  final GlobalKey<TooltipState> _confirmPasswordTooltipKey = GlobalKey<TooltipState>();
+
+  String? _nameError;
+  String? _emailError;
+  String? _passwordError;
+  String? _confirmPasswordError;
+
+  bool _hasSubmitted = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -21,43 +39,155 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
   @override
   void initState() {
     super.initState();
-    _nameController.addListener(_validateInput);
-    _emailController.addListener(_validateInput);
-    _passwordController.addListener(_validateInput);
-    _confirmPasswordController.addListener(_validateInput);
+    _nameController.addListener(_onTextChanged);
+    _emailController.addListener(_onTextChanged);
+    _passwordController.addListener(_onTextChanged);
+    _confirmPasswordController.addListener(_onTextChanged);
+
+    _nameFocusNode.addListener(() => _handleFocusChanged(
+      _nameFocusNode,
+      () => ValidationUtils.validateName(_nameController.text),
+      (e) => setState(() => _nameError = e),
+      _nameTooltipKey,
+      _nameController,
+    ));
+
+    _emailFocusNode.addListener(() => _handleFocusChanged(
+      _emailFocusNode,
+      () => ValidationUtils.validateEmail(_emailController.text),
+      (e) => setState(() => _emailError = e),
+      _emailTooltipKey,
+      _emailController,
+    ));
+
+    _passwordFocusNode.addListener(() => _handleFocusChanged(
+      _passwordFocusNode,
+      () => ValidationUtils.validatePassword(_passwordController.text),
+      (e) => setState(() => _passwordError = e),
+      _passwordTooltipKey,
+      _passwordController,
+    ));
+
+    _confirmPasswordFocusNode.addListener(() => _handleFocusChanged(
+      _confirmPasswordFocusNode,
+      () => ValidationUtils.validateConfirmPassword(
+        _confirmPasswordController.text,
+        _passwordController.text,
+      ),
+      (e) => setState(() => _confirmPasswordError = e),
+      _confirmPasswordTooltipKey,
+      _confirmPasswordController,
+    ));
   }
 
   @override
   void dispose() {
+    _nameController.removeListener(_onTextChanged);
+    _emailController.removeListener(_onTextChanged);
+    _passwordController.removeListener(_onTextChanged);
+    _confirmPasswordController.removeListener(_onTextChanged);
+
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+
+    _nameFocusNode.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _confirmPasswordFocusNode.dispose();
+
     super.dispose();
   }
 
-  void _validateInput() {
-    String name = _nameController.text.trim();
-    String email = _emailController.text.trim();
-    String password = _passwordController.text;
-    String confirmPassword = _confirmPasswordController.text;
-
-    setState(() {
-      _isButtonEnabled = name.isNotEmpty &&
-          email.isNotEmpty &&
-          password.isNotEmpty &&
-          confirmPassword.isNotEmpty;
-    });
+  void _handleFocusChanged(
+    FocusNode node,
+    String? Function() validator,
+    void Function(String?) updateError,
+    GlobalKey<TooltipState> tooltipKey,
+    TextEditingController controller,
+  ) {
+    if (!node.hasFocus && controller.text.isNotEmpty) {
+      final error = validator();
+      updateError(error);
+      if (error != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          tooltipKey.currentState?.ensureTooltipVisible();
+        });
+      }
+    }
   }
 
-  void _handleCreateAccount() {
-    if (!_isButtonEnabled) return;
+  void _onTextChanged() {
+    if (_hasSubmitted) {
+      setState(() {
+        _nameError = ValidationUtils.validateName(_nameController.text);
+        _emailError = ValidationUtils.validateEmail(_emailController.text);
+        _passwordError = ValidationUtils.validatePassword(_passwordController.text);
+        _confirmPasswordError = ValidationUtils.validateConfirmPassword(
+          _confirmPasswordController.text,
+          _passwordController.text,
+        );
+      });
+    } else {
+      if (_nameError != null && ValidationUtils.validateName(_nameController.text) == null) {
+        setState(() => _nameError = null);
+      }
+      if (_emailError != null && ValidationUtils.validateEmail(_emailController.text) == null) {
+        setState(() => _emailError = null);
+      }
+      if (_passwordError != null && ValidationUtils.validatePassword(_passwordController.text) == null) {
+        setState(() => _passwordError = null);
+      }
+      if (_confirmPasswordError != null &&
+          ValidationUtils.validateConfirmPassword(
+            _confirmPasswordController.text,
+            _passwordController.text,
+          ) == null) {
+        setState(() => _confirmPasswordError = null);
+      }
+    }
+  }
 
-    // Validate passwords match
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
+  Future<void> _handleCreateAccount() async {
+    _hasSubmitted = true;
+    final nameError = ValidationUtils.validateName(_nameController.text);
+    final emailError = ValidationUtils.validateEmail(_emailController.text);
+    final passwordError = ValidationUtils.validatePassword(_passwordController.text);
+    final confirmPasswordError = ValidationUtils.validateConfirmPassword(
+      _confirmPasswordController.text,
+      _passwordController.text,
+    );
+
+    setState(() {
+      _nameError = nameError;
+      _emailError = emailError;
+      _passwordError = passwordError;
+      _confirmPasswordError = confirmPasswordError;
+    });
+
+    if (nameError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _nameTooltipKey.currentState?.ensureTooltipVisible();
+      });
+      return;
+    }
+    if (emailError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _emailTooltipKey.currentState?.ensureTooltipVisible();
+      });
+      return;
+    }
+    if (passwordError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _passwordTooltipKey.currentState?.ensureTooltipVisible();
+      });
+      return;
+    }
+    if (confirmPasswordError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _confirmPasswordTooltipKey.currentState?.ensureTooltipVisible();
+      });
       return;
     }
 
@@ -65,15 +195,46 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
       _isLoading = true;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // TODO: Navigate to next screen or login
-        print('Account created successfully');
+    if (AuthService.instance.isFirebaseInitialized) {
+      try {
+        await AuthService.instance.registerWithEmailPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          displayName: _nameController.text.trim(),
+        );
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          showSuccessToast(context, 'Account created successfully!');
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          final errorMessage = AuthService.getReadableErrorMessage(e);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: const Color(0xFFC40000),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
-    });
+    } else {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          showSuccessToast(context, 'Account created successfully!');
+          debugPrint('Account created successfully');
+        }
+      });
+    }
   }
 
   void _handleSignIn() {
@@ -136,6 +297,7 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                       // Your name input field
                       TextField(
                         controller: _nameController,
+                        focusNode: _nameFocusNode,
                         style: const TextStyle(
                           color: Color(0xFF000000),
                           fontSize: 16,
@@ -152,24 +314,42 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                             horizontal: 12,
                             vertical: 12,
                           ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 48,
+                            maxWidth: 48,
+                            maxHeight: 48,
+                          ),
+                          suffixIcon: _nameError != null
+                              ? AmazonErrorTooltip(
+                                  tooltipKey: _nameTooltipKey,
+                                  message: _nameError!,
+                                )
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _nameError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _nameError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFFF9900),
+                            borderSide: BorderSide(
+                              color: _nameError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFFFF9900),
                               width: 2,
                             ),
                           ),
@@ -191,6 +371,8 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                       // Email input field
                       TextField(
                         controller: _emailController,
+                        focusNode: _emailFocusNode,
+                        keyboardType: TextInputType.emailAddress,
                         style: const TextStyle(
                           color: Color(0xFF000000),
                           fontSize: 16,
@@ -207,24 +389,42 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                             horizontal: 12,
                             vertical: 12,
                           ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 48,
+                            maxWidth: 48,
+                            maxHeight: 48,
+                          ),
+                          suffixIcon: _emailError != null
+                              ? AmazonErrorTooltip(
+                                  tooltipKey: _emailTooltipKey,
+                                  message: _emailError!,
+                                )
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFFF9900),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFFFF9900),
                               width: 2,
                             ),
                           ),
@@ -243,9 +443,10 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                       ),
                       SizedBox(height: screenHeight * 0.01),
 
-                      // Password input field with show/hide
+                      // Password input field with show/hide and error tooltip
                       TextField(
                         controller: _passwordController,
+                        focusNode: _passwordFocusNode,
                         obscureText: _obscurePassword,
                         style: const TextStyle(
                           color: Color(0xFF000000),
@@ -263,39 +464,60 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                             horizontal: 12,
                             vertical: 12,
                           ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                            maxHeight: 48,
+                          ),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_passwordError != null)
+                                AmazonErrorTooltip(
+                                  tooltipKey: _passwordTooltipKey,
+                                  message: _passwordError!,
+                                ),
+                              IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: const Color(0xFF767676),
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _passwordError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _passwordError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFFF9900),
+                            borderSide: BorderSide(
+                              color: _passwordError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFFFF9900),
                               width: 2,
                             ),
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: const Color(0xFF767676),
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
                           ),
                         ),
                       ),
@@ -312,9 +534,10 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                       ),
                       SizedBox(height: screenHeight * 0.01),
 
-                      // Re-enter password input field with show/hide
+                      // Re-enter password input field with show/hide and error tooltip
                       TextField(
                         controller: _confirmPasswordController,
+                        focusNode: _confirmPasswordFocusNode,
                         obscureText: _obscureConfirmPassword,
                         style: const TextStyle(
                           color: Color(0xFF000000),
@@ -332,51 +555,110 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                             horizontal: 12,
                             vertical: 12,
                           ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                            maxHeight: 48,
+                          ),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_confirmPasswordError != null)
+                                AmazonErrorTooltip(
+                                  tooltipKey: _confirmPasswordTooltipKey,
+                                  message: _confirmPasswordError!,
+                                ),
+                              IconButton(
+                                icon: Icon(
+                                  _obscureConfirmPassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: const Color(0xFF767676),
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _confirmPasswordError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _confirmPasswordError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFFF9900),
+                            borderSide: BorderSide(
+                              color: _confirmPasswordError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFFFF9900),
                               width: 2,
                             ),
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: const Color(0xFF767676),
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _obscureConfirmPassword = !_obscureConfirmPassword;
-                              });
-                            },
                           ),
                         ),
                       ),
                       SizedBox(height: screenHeight * 0.02),
 
                       // Legal disclaimer
-                      const Text(
-                        'By creating an account, you agree to Amazon\'s Conditions of Use and Privacy Notice.',
-                        style: TextStyle(
-                          color: Color(0xFF000000),
-                          fontSize: 11,
-                        ),
+                      Wrap(
+                        children: [
+                          const Text(
+                            'By creating an account, you agree to Amazon\'s ',
+                            style: TextStyle(
+                              color: Color(0xFF000000),
+                              fontSize: 11,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => showUnderDevelopmentDialog(context, 'Conditions of Use'),
+                            child: const Text(
+                              'Conditions of Use',
+                              style: TextStyle(
+                                color: Color(0xFF0066C0),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const Text(
+                            ' and ',
+                            style: TextStyle(
+                              color: Color(0xFF000000),
+                              fontSize: 11,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => showUnderDevelopmentDialog(context, 'Privacy Notice'),
+                            child: const Text(
+                              'Privacy Notice',
+                              style: TextStyle(
+                                color: Color(0xFF0066C0),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const Text(
+                            '.',
+                            style: TextStyle(
+                              color: Color(0xFF000000),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
                       SizedBox(height: screenHeight * 0.02),
 
@@ -385,13 +667,9 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
                         width: double.infinity,
                         height: 32,
                         child: ElevatedButton(
-                          onPressed: _isButtonEnabled && !_isLoading
-                              ? _handleCreateAccount
-                              : null,
+                          onPressed: !_isLoading ? _handleCreateAccount : null,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _isButtonEnabled
-                                ? const Color(0xFFF0C14B)
-                                : const Color(0xFFE8E8E8),
+                            backgroundColor: const Color(0xFFF0C14B),
                             foregroundColor: Colors.black,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
@@ -489,7 +767,7 @@ class _AmazonSignupScreenState extends State<AmazonSignupScreen> {
   Widget _buildFooterLink(String text) {
     return InkWell(
       onTap: () {
-        print('$text pressed');
+        showUnderDevelopmentDialog(context, text);
       },
       child: Text(
         text,

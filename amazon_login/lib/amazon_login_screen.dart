@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'amazon_signup_screen.dart';
+import 'auth_service.dart';
+import 'validation_utils.dart';
 
 class AmazonLoginScreen extends StatefulWidget {
   const AmazonLoginScreen({super.key});
@@ -11,45 +13,106 @@ class AmazonLoginScreen extends StatefulWidget {
 
 class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
-  bool _isButtonEnabled = false;
+  final FocusNode _emailFocusNode = FocusNode();
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+
+  String? _emailError;
+  bool _hasSubmitted = false;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _emailController.addListener(_validateInput);
+    _emailController.addListener(_onTextChanged);
+    _emailFocusNode.addListener(_onFocusChanged);
   }
 
   @override
   void dispose() {
+    _emailController.removeListener(_onTextChanged);
+    _emailFocusNode.removeListener(_onFocusChanged);
     _emailController.dispose();
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
-  void _validateInput() {
-    String email = _emailController.text.trim();
+  void _onTextChanged() {
+    if (_hasSubmitted || _emailError != null) {
+      final error = ValidationUtils.validateLoginInput(_emailController.text);
+      if (error != _emailError) {
+        setState(() {
+          _emailError = error;
+        });
+      }
+    }
+  }
 
-    setState(() {
-      _isButtonEnabled = email.isNotEmpty;
-    });
+  void _onFocusChanged() {
+    if (!_emailFocusNode.hasFocus && _emailController.text.isNotEmpty) {
+      final error = ValidationUtils.validateLoginInput(_emailController.text);
+      if (error != _emailError) {
+        setState(() {
+          _emailError = error;
+        });
+        if (error != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _emailTooltipKey.currentState?.ensureTooltipVisible();
+          });
+        }
+      }
+    }
   }
 
   void _handleContinue() {
-    if (!_isButtonEnabled) return;
+    _hasSubmitted = true;
+    final error = ValidationUtils.validateLoginInput(_emailController.text);
+    if (error != null) {
+      setState(() {
+        _emailError = error;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _emailTooltipKey.currentState?.ensureTooltipVisible();
+      });
+      return;
+    }
 
     setState(() {
-      _isLoading = true;
+      _emailError = null;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // TODO: Navigate to password screen
-        print('Continue button pressed');
-      }
-    });
+    if (AuthService.instance.isFirebaseInitialized) {
+      _showPasswordModal(_emailController.text.trim());
+    } else {
+      setState(() {
+        _isLoading = true;
+      });
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          showSuccessToast(context, 'Sign-in successful!');
+          debugPrint('Continue button pressed');
+        }
+      });
+    }
+  }
+
+  void _showPasswordModal(String email) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => AmazonPasswordSheet(
+        email: email,
+        onSignInSuccess: () {
+          showSuccessToast(context, 'Sign-in successful!');
+        },
+      ),
+    );
   }
 
   void _handleCreateAccount() {
@@ -62,7 +125,7 @@ class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
   }
 
   void _handleNeedHelp() {
-    print('Need help pressed');
+    showUnderDevelopmentDialog(context, 'Need help?');
   }
 
   @override
@@ -121,6 +184,8 @@ class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
                       // Email input field
                       TextField(
                         controller: _emailController,
+                        focusNode: _emailFocusNode,
+                        keyboardType: TextInputType.emailAddress,
                         style: const TextStyle(
                           color: Color(0xFF000000),
                           fontSize: 16,
@@ -137,24 +202,42 @@ class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
                             horizontal: 12,
                             vertical: 12,
                           ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 48,
+                            maxWidth: 48,
+                            maxHeight: 48,
+                          ),
+                          suffixIcon: _emailError != null
+                              ? AmazonErrorTooltip(
+                                  tooltipKey: _emailTooltipKey,
+                                  message: _emailError!,
+                                )
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF888888),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF888888),
                               width: 1,
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(0),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFFF9900),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFFFF9900),
                               width: 2,
                             ),
                           ),
@@ -167,13 +250,9 @@ class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
                         width: double.infinity,
                         height: 32,
                         child: ElevatedButton(
-                          onPressed: _isButtonEnabled && !_isLoading
-                              ? _handleContinue
-                              : null,
+                          onPressed: !_isLoading ? _handleContinue : null,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _isButtonEnabled
-                                ? const Color(0xFFF0C14B)
-                                : const Color(0xFFE8E8E8),
+                            backgroundColor: const Color(0xFFF0C14B),
                             foregroundColor: Colors.black,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
@@ -203,12 +282,50 @@ class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
                       SizedBox(height: screenHeight * 0.02),
 
                       // "By continuing, you agree to Amazon's Conditions of Use and Privacy Notice."
-                      const Text(
-                        'By continuing, you agree to Amazon\'s Conditions of Use and Privacy Notice.',
-                        style: TextStyle(
-                          color: Color(0xFF000000),
-                          fontSize: 11,
-                        ),
+                      Wrap(
+                        children: [
+                          const Text(
+                            'By continuing, you agree to Amazon\'s ',
+                            style: TextStyle(
+                              color: Color(0xFF000000),
+                              fontSize: 11,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => showUnderDevelopmentDialog(context, 'Conditions of Use'),
+                            child: const Text(
+                              'Conditions of Use',
+                              style: TextStyle(
+                                color: Color(0xFF0066C0),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const Text(
+                            ' and ',
+                            style: TextStyle(
+                              color: Color(0xFF000000),
+                              fontSize: 11,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => showUnderDevelopmentDialog(context, 'Privacy Notice'),
+                            child: const Text(
+                              'Privacy Notice',
+                              style: TextStyle(
+                                color: Color(0xFF0066C0),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const Text(
+                            '.',
+                            style: TextStyle(
+                              color: Color(0xFF000000),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
                       SizedBox(height: screenHeight * 0.02),
 
@@ -315,7 +432,7 @@ class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
   Widget _buildFooterLink(String text) {
     return InkWell(
       onTap: () {
-        print('$text pressed');
+        showUnderDevelopmentDialog(context, text);
       },
       child: Text(
         text,
@@ -323,6 +440,203 @@ class _AmazonLoginScreenState extends State<AmazonLoginScreen> {
           color: Color(0xFF0066C0),
           fontSize: 11,
         ),
+      ),
+    );
+  }
+}
+
+/// Amazon styled password bottom sheet for entering credentials.
+class AmazonPasswordSheet extends StatefulWidget {
+  final String email;
+  final VoidCallback onSignInSuccess;
+
+  const AmazonPasswordSheet({
+    super.key,
+    required this.email,
+    required this.onSignInSuccess,
+  });
+
+  @override
+  State<AmazonPasswordSheet> createState() => _AmazonPasswordSheetState();
+}
+
+class _AmazonPasswordSheetState extends State<AmazonPasswordSheet> {
+  final TextEditingController _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String? _passwordError;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignIn() async {
+    final error = ValidationUtils.validatePassword(_passwordController.text);
+    if (error != null) {
+      setState(() {
+        _passwordError = error;
+      });
+      return;
+    }
+
+    setState(() {
+      _passwordError = null;
+      _isLoading = true;
+    });
+
+    try {
+      await AuthService.instance.signInWithEmailPassword(
+        email: widget.email,
+        password: _passwordController.text,
+      );
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        Navigator.pop(context);
+        widget.onSignInSuccess();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        final errorMessage = AuthService.getReadableErrorMessage(e);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: const Color(0xFFC40000),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: bottomInset + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Enter Password',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                widget.email,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF555555),
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => Navigator.pop(context),
+                child: const Text(
+                  'Change',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF0066C0),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            decoration: InputDecoration(
+              labelText: 'Password',
+              errorText: _passwordError,
+              filled: true,
+              fillColor: Colors.white,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 20,
+                  color: const Color(0xFF555555),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(
+                  color: Color(0xFFFF9900),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 38,
+            child: ElevatedButton(
+              onPressed: !_isLoading ? _handleSignIn : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF0C14B),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                      ),
+                    )
+                  : const Text(
+                      'Sign in',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }

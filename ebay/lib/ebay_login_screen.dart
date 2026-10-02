@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'auth_service.dart';
 import 'ebay_signup_screen.dart';
+import 'validation_utils.dart';
 
 class EbayLoginScreen extends StatefulWidget {
   const EbayLoginScreen({super.key});
@@ -11,50 +13,111 @@ class EbayLoginScreen extends StatefulWidget {
 
 class _EbayLoginScreenState extends State<EbayLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
-  bool _isButtonEnabled = false;
+  final FocusNode _emailFocusNode = FocusNode();
+  final GlobalKey<TooltipState> _emailTooltipKey = GlobalKey<TooltipState>();
+
+  String? _emailError;
+  bool _hasSubmitted = false;
   bool _isLoading = false;
   bool _staySignedIn = false;
 
   @override
   void initState() {
     super.initState();
-    _emailController.addListener(_validateInput);
+    _emailController.addListener(_onTextChanged);
+    _emailFocusNode.addListener(_onFocusChanged);
   }
 
   @override
   void dispose() {
+    _emailController.removeListener(_onTextChanged);
+    _emailFocusNode.removeListener(_onFocusChanged);
     _emailController.dispose();
+    _emailFocusNode.dispose();
     super.dispose();
   }
 
-  void _validateInput() {
-    String email = _emailController.text.trim();
+  void _onTextChanged() {
+    if (_hasSubmitted || _emailError != null) {
+      final error = ValidationUtils.validateEmailOrUsername(_emailController.text);
+      if (error != _emailError) {
+        setState(() {
+          _emailError = error;
+        });
+      }
+    }
+  }
 
-    setState(() {
-      _isButtonEnabled = email.isNotEmpty;
-    });
+  void _onFocusChanged() {
+    if (!_emailFocusNode.hasFocus && _emailController.text.isNotEmpty) {
+      final error = ValidationUtils.validateEmailOrUsername(_emailController.text);
+      if (error != _emailError) {
+        setState(() {
+          _emailError = error;
+        });
+        if (error != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _emailTooltipKey.currentState?.ensureTooltipVisible();
+          });
+        }
+      }
+    }
   }
 
   void _handleContinue() {
-    if (!_isButtonEnabled) return;
+    _hasSubmitted = true;
+    final error = ValidationUtils.validateEmailOrUsername(_emailController.text);
+    if (error != null) {
+      setState(() {
+        _emailError = error;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _emailTooltipKey.currentState?.ensureTooltipVisible();
+      });
+      return;
+    }
 
     setState(() {
-      _isLoading = true;
+      _emailError = null;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // TODO: Navigate to next screen
-        print('Continue button pressed');
-      }
-    });
+    if (AuthService.instance.isFirebaseInitialized) {
+      _showPasswordModal(_emailController.text.trim());
+    } else {
+      setState(() {
+        _isLoading = true;
+      });
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          showSuccessToast(context, 'Sign-in successful!');
+          debugPrint('Continue button pressed');
+        }
+      });
+    }
+  }
+
+  void _showPasswordModal(String email) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => EbayPasswordSheet(
+        email: email,
+        onSignInSuccess: () {
+          showSuccessToast(context, 'Sign-in successful!');
+        },
+      ),
+    );
   }
 
   void _handleSocialLogin(String provider) {
-    print('Continue with $provider');
+    showUnderDevelopmentDialog(context, 'Continue with $provider');
   }
 
   void _handleCreateAccount() {
@@ -150,6 +213,7 @@ class _EbayLoginScreenState extends State<EbayLoginScreen> {
                       // Email input
                       TextField(
                         controller: _emailController,
+                        focusNode: _emailFocusNode,
                         style: const TextStyle(
                           color: Color(0xFF191927),
                           fontSize: 16,
@@ -166,24 +230,42 @@ class _EbayLoginScreenState extends State<EbayLoginScreen> {
                             horizontal: 16,
                             vertical: 16,
                           ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 48,
+                            maxWidth: 48,
+                            maxHeight: 48,
+                          ),
+                          suffixIcon: _emailError != null
+                              ? EbayErrorTooltip(
+                                  tooltipKey: _emailTooltipKey,
+                                  message: _emailError!,
+                                )
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD3D3D3),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFFD3D3D3),
                               width: 1,
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFD3D3D3),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFFD3D3D3),
                               width: 1,
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF0964EC),
+                            borderSide: BorderSide(
+                              color: _emailError != null
+                                  ? const Color(0xFFC40000)
+                                  : const Color(0xFF0964EC),
                               width: 2,
                             ),
                           ),
@@ -196,13 +278,9 @@ class _EbayLoginScreenState extends State<EbayLoginScreen> {
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _isButtonEnabled && !_isLoading
-                              ? _handleContinue
-                              : null,
+                          onPressed: !_isLoading ? _handleContinue : null,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _isButtonEnabled
-                                ? const Color(0xFF0964EC)
-                                : const Color(0xFFB3D1FF),
+                            backgroundColor: const Color(0xFF0964EC),
                             foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
@@ -245,7 +323,7 @@ class _EbayLoginScreenState extends State<EbayLoginScreen> {
                             child: Text(
                               'or',
                               style: TextStyle(
-                                color: const Color(0xFF191927).withOpacity(0.6),
+                                color: const Color(0xFF191927).withValues(alpha: 0.6),
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -305,10 +383,13 @@ class _EbayLoginScreenState extends State<EbayLoginScreen> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(
-                            Icons.info_outline,
-                            size: 16,
-                            color: Color(0xFF767676),
+                          InkWell(
+                            onTap: () => showUnderDevelopmentDialog(context, 'Stay signed in info'),
+                            child: const Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Color(0xFF767676),
+                            ),
                           ),
                         ],
                       ),
@@ -404,7 +485,7 @@ class _EbayLoginScreenState extends State<EbayLoginScreen> {
   Widget _buildFooterLink(String text) {
     return InkWell(
       onTap: () {
-        print('$text pressed');
+        showUnderDevelopmentDialog(context, text);
       },
       child: Text(
         text,
@@ -413,6 +494,203 @@ class _EbayLoginScreenState extends State<EbayLoginScreen> {
           fontSize: 12,
           decoration: TextDecoration.underline,
         ),
+      ),
+    );
+  }
+}
+
+/// eBay styled password bottom sheet for entering credentials.
+class EbayPasswordSheet extends StatefulWidget {
+  final String email;
+  final VoidCallback onSignInSuccess;
+
+  const EbayPasswordSheet({
+    super.key,
+    required this.email,
+    required this.onSignInSuccess,
+  });
+
+  @override
+  State<EbayPasswordSheet> createState() => _EbayPasswordSheetState();
+}
+
+class _EbayPasswordSheetState extends State<EbayPasswordSheet> {
+  final TextEditingController _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String? _passwordError;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignIn() async {
+    final error = ValidationUtils.validatePassword(_passwordController.text);
+    if (error != null) {
+      setState(() {
+        _passwordError = error;
+      });
+      return;
+    }
+
+    setState(() {
+      _passwordError = null;
+      _isLoading = true;
+    });
+
+    try {
+      await AuthService.instance.signInWithEmailPassword(
+        email: widget.email,
+        password: _passwordController.text,
+      );
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        Navigator.pop(context);
+        widget.onSignInSuccess();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        final errorMessage = AuthService.getReadableErrorMessage(e);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: const Color(0xFFC40000),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: bottomInset + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Enter Password',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                widget.email,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF555555),
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => Navigator.pop(context),
+                child: const Text(
+                  'Change',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF0964EC),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            decoration: InputDecoration(
+              labelText: 'Password',
+              errorText: _passwordError,
+              filled: true,
+              fillColor: Colors.white,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 20,
+                  color: const Color(0xFF555555),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(
+                  color: Color(0xFF0064D2),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton(
+              onPressed: !_isLoading ? _handleSignIn : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0064D2),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22),
+                ),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Sign in',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
